@@ -1,6 +1,7 @@
 const path = require('path');
 const core = require('@actions/core');
 const exec = require('@actions/exec');
+const axios = require('axios');
 const GhostAdminApi = require('@tryghost/admin-api');
 
 (async function main() {
@@ -9,7 +10,27 @@ const GhostAdminApi = require('@tryghost/admin-api');
         const api = new GhostAdminApi({
             url,
             key: core.getInput('api-key'),
-            version: 'v5.0'
+            version: 'v5.0',
+            // Custom makeRequest implementation
+            makeRequest({url, method, data, params = {}, headers = {}}) {
+                return axios({
+                    url,
+                    method,
+                    params,
+                    data,
+                    headers,
+                    maxContentLength: 100000000,
+                    maxBodyLength: 100000000,
+                    paramsSerializer(parameters) {
+                        return Object.keys(parameters).reduce((parts, key) => {
+                            const val = encodeURIComponent([].concat(parameters[key]).join(','));
+                            return parts.concat(`${key}=${val}`);
+                        }, []).join('&');
+                    }
+                }).then((res) => {
+                    return res.data;
+                });
+            }
         });
         const workingDir = core.getInput('working-directory');
         const basePath = path.join(process.env.GITHUB_WORKSPACE, workingDir);
